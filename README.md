@@ -103,9 +103,9 @@ It's nice to use a well-formatted API. The original ScoreSaber worked well enoug
 | `/player/{id}/scores/top/{page}` | Tops scores for profile |
 | `/user/{id}/refresh` | Checks for changes in player stats; weird that it's `/user`, right? |
 
-The issue is that the new ScoreSaber system has not been updated to support leaderboards, so we're out of luck for half the functionality. In that case, we'll have to rely on webscraping pre-rendered HTML pages from the old API. I'm not sure how else to do this -- maybe I can use WireShark to figure out a direct way to access the API by MitM'ing the Beat Saber client? The issue with that methods is that it would require debug SSL keys, which are often unavailable in production builds; I'm guessing that Beat Saber doesn't store that type of data.
+The issue is that the new ScoreSaber system has not been updated to support leaderboards, so we're out of luck for half the functionality. In that case, we'll have to rely on webscraping pre-rendered HTML pages from the old API. I'm not sure how else to do this -- maybe I can use WireShark to figure out a direct way to access the API by MitM'ing the Beat Saber client? The issue with that method is that it would require debug SSL keys, which are often unavailable in production builds; I'm guessing that Beat Saber doesn't store that type of data.
 
-So, part of the `get_song_data.py` script checks against the old API to see if a certain map is ranked.
+So, part of the `get_map_data.py` script checks against the old API to see if a certain map is ranked. Except, that's what I would have done if BaliBalo's `/ranked` tool hadn't existed. Using `scoresaber.balibalo.xyz/ranked`, the script loads an aggregate data object of every ranked map. Balo's project is open source on [Github](https://github.com/BaliBalo/ScoreSaber); you should check it out, there are a few useful tools.
 
 ## 2. Create data representation
 
@@ -128,18 +128,85 @@ Object format:
         "obstacles": []
     },
     "output": {
-        "difficulty": 0,
         "pp": 0
     }
 }
 ```
 
-Let's just hope that the machine learning model can draw proper correlations between the available inputs.
-
-Next up: a script to convert song format to AI format. Check `get_map_data.py` for the full code, but it works as follows:
+Next up: a script to convert song format to AI format. Check `get_map_data.py` for the full code, but here's a quick overview:
 1. Find Beat Saber game directory
 2. Get all custom songs
 3. Reader metadata in `info.dat`
 4. Find all difficulty maps for each song
 5. For each ranked map, gather a representative data object
 6. Export data objects to `training_data.json`
+
+I didn't include `training_data.json` in this repository because each version is unique to whoever generated it. Additionally, my version of the file is over 181MB in size. Anyone can train the neural network based off of their own game directory.
+
+Let's just hope that the machine learning model can draw proper correlations between the available inputs.
+
+## 3. Create neural network
+
+First up is creating a set of fixed dimensions for the input, hidden, and output layers. The following diagram shows the easiest way to fit in all of the required information; its only downside is the sheer size of the set -- thousands of layers? Insane! It shouldn't work!
+
+```python
+empty_object = [  # Dimensions: (5)
+    None,
+    None,
+    None,
+    None,
+    None
+]
+
+structure = [  # Dimensions: (4, 5000, 5)
+    [  # Metadata
+        [  # Speed object
+            "bpm",
+            "jump_speed",
+            "jump_offset",
+            None,
+            None,
+        ],
+        [  # Count object
+            "note_count",
+            "event_count",
+            "obstacle_count",
+            None,
+            None
+        ],
+        ...  # Empty objects
+    ],
+    [  # Notes
+        [  # Note object
+            "_time",
+            "_lineIndex",
+            "_lineLayer",
+            "_type",
+            "_cutDirection"
+        ],
+        ...  # Note objects followed by empty objects
+    ],
+    [  # Events
+        [  # Event object
+            "_time",
+            "_type",
+            "_value",
+            None,
+            None
+        ],
+        ...  # Event objects followed by empty objects
+    ],
+    [  # Obstacles
+        [  # Obstacles object
+            "_time",
+            "_lineIndex",
+            "_type",
+            "_duration",
+            "_width"
+        ],
+        ...  # Obstacle objects followed by empty objects
+    ]
+]
+```
+
+Now we have to normalize the available data. This step will allow the neural network to appropriately use any "wild" information we provide. Doing so will adapt all values to a 0 - 1 scale. 
