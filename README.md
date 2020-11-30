@@ -91,7 +91,7 @@ Simple, right? This Overkill example is mapped in version `2.0.0`. In-depth expl
 | `_notes` | List of notes in the map |
 | `_obstacles` | List of obstacles in the map |
 
-## 1. Reverse engineer ScoreSaber's new API
+## 1.1 Reverse engineer ScoreSaber's new API
 
 It's nice to use a well-formatted API. The original ScoreSaber worked well enough, but thanks to the efforts of Umbranox and team, we have a fresh API to use instead. Using Google Chrome's built-in Network panel under Devtools, I was able to find a few useful endpoints that aren't publicly documented. There are far more available that I have not listed below.
 
@@ -107,7 +107,7 @@ The issue is that the new ScoreSaber system has not been updated to support lead
 
 So, part of the `get_map_data.py` script checks against the old API to see if a certain map is ranked. Except, that's what I would have done if BaliBalo's `/ranked` tool hadn't existed. Using `scoresaber.balibalo.xyz/ranked`, the script loads an aggregate data object of every ranked map. Balo's project is open source on [Github](https://github.com/BaliBalo/ScoreSaber); you should check it out, there are a few useful tools.
 
-## 2. Create data representation
+## 1.2 Create data representation
 
 Let's design a data object to use for machine learning. We shouldn't over-simplify nor create an object that's too complex. We want the AI to do its job without too much pruning. There's still the option to just feed the AI the raw file -- but where's the fun in that?
 
@@ -145,9 +145,38 @@ I didn't include `training_data.json` in this repository because each version is
 
 Let's just hope that the machine learning model can draw proper correlations between the available inputs.
 
-## 3. Create neural network
+## 2 Normalize data
 
-First up is creating a set of fixed dimensions for the input, hidden, and output layers. The following diagram shows the easiest way to fit in all of the required information; its only downside is the sheer size of the set -- thousands of layers? Insane! It shouldn't work!
+Now we have to normalize the available data. This step will allow the neural network to appropriately use any "wild" information we provide. Doing so will adapt all values to a 0 - 1 scale. It's relatively simple if we just use Keras's built-in normalization function. The following diagram shows the structure of the map:
+
+```python
+normalizations = {
+    "bpm": [],
+    "jump_speed": [],
+    "jump_offset": [],
+    "note_count": [],
+    "note_time": [],
+    "note_line_index": [],
+    "note_line_layer": [],
+    "note_type": [],
+    "note_cut_direction": [],
+    "event_count": [],
+    "event_time": [],
+    "event_type": [],
+    "event_value": [],
+    "obstacle_count": [],
+    "obstacle_time": [],
+    "obstacle_line_index": [],
+    "obstacle_type": [],
+    "obstacle_duration": [],
+    "obstacle_width": [],
+    "pp": []
+}
+```
+
+## 3 Construct input/output nodes for machine learning
+
+Next up is creating a set of fixed dimensions for the input, hidden, and output layers. We need to use the normalized data from the last step and then fill in shape of the data structure so that the object does not have "jagged edges" (the data's shape is a uniform 4-dimensional matrix of `(song_count, 4, 5000, 5)`). Remember that each song is a single input into the final neural network product, thus  The following diagram shows the easiest way to fit in all of the required information; its only downside is the sheer size of the set -- thousands of input nodes? Insane! It shouldn't work!
 
 ```python
 empty_object = [  # Dimensions: (5)
@@ -209,4 +238,3 @@ structure = [  # Dimensions: (4, 5000, 5)
 ]
 ```
 
-Now we have to normalize the available data. This step will allow the neural network to appropriately use any "wild" information we provide. Doing so will adapt all values to a 0 - 1 scale. 
